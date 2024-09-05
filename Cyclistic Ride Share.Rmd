@@ -1,0 +1,361 @@
+---
+Case Study Report: Cyclistic Bike-Share Program Analysis
+author: "Pooja Rattan"
+date: "May 15, 2024"
+output: github_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+Introduction
+
+In the Coursera Data Analytics case study, I engaged in a comprehensive
+range of hands-on activities typically entrusted to a Junior Data
+Analyst. This case study simulates my role as a Junior Data Analyst at
+Cyclistic, a fictitious bike-share company in Chicago. My
+responsibilities included analyzing the distinct usage trends of casual
+riders versus annual members, with the objective of developing a
+marketing strategy to enhance the conversion of casual riders into
+loyal, annual members.
+
+The strategy's success hinges on executive approval, which requires
+solid data insights and professional visualizations to support my
+recommendations for converting casual riders into annual members. I
+addressed the business inquiries by adhering to the data analysis
+process stages learned during the course: Ask, Prepare, Process,
+Analyze, Share, and Act.
+
+Background
+
+Cyclistic is a bike-share program featuring more than 5,800 bicycles and
+600 docking stations. The program distinguishes itself by offering
+reclining bikes, hand tricycles, and cargo bikes, making it inclusive
+for people with disabilities and those who can't use a standard
+two-wheeled bike. While the majority of riders opt for traditional
+bikes, about 8% of riders use the assistive options. Cyclistic users are
+more likely to ride for leisure, with approximately 30% commuting to
+work daily.
+
+Key Personnel:
+
+-   Lily Moreno: Director of Marketing, responsible for campaigns and
+    initiatives to promote the bike-share program through various
+    channels.
+
+-   Cyclistic Marketing Analytics Team: A team of Data Analysts
+    collecting, analyzing, and reporting data to guide marketing
+    strategy. I joined this team six months ago.
+
+-   Cyclistic Executive Team: A detail-oriented group that will decide
+    whether to approve the recommended marketing program.
+
+ASK
+
+Business Task The goal of this analysis is to understand the patterns
+and trends in the usage of Divvy bikes over the year 2023. Specifically,
+we aim to identify peak usage times, the popularity of different bike
+types, and the behavior of various rider types (members vs. casual
+riders). Insights from this analysis will help inform strategies to
+optimize bike availability, improve customer satisfaction, and guide
+marketing efforts.
+
+Key Stakeholders: 
+* Divvy Bike Operations Team 
+* Marketing Department
+* Customer Experience Team
+* Urban Planners
+
+PREPARE:
+
+In the preparation phase, we meticulously gathered and cleaned Divvy
+bike trip data spanning the entirety of 2023. By ensuring data integrity
+and completeness, we laid the groundwork for robust analysis aimed at
+uncovering actionable insights into rider trends, bike usage patterns,
+and membership behaviors.
+
+The data used for this analysis consists of Divvy bike trip data for the
+year 2023, sourced from the last 12 months of monthly CSV files named in
+the pattern "2023MM-divvy-tripdata.csv". These files contain detailed
+records of individual bike trips, including start and end times, start
+and end stations, ride-able type (bike type), and rider type (member or
+casual). The data was downloaded from the Divvy Trip Data portal and has
+been made available by Motivate International Inc. under a license
+agreement which outlines the terms of use.
+
+```{r packages}
+# Installing the necessary packages
+install.packages(c("ggplot2", "scales", "dplyr", "lubridate", "tidyverse", "forecast", "purrr", "readxl"))
+```
+
+```{r Libraries}
+# Installing the necessary libraries
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(scales)
+library(forecast)
+library(ggplot2)
+library(readxl)
+```
+
+```{r uploading the data from a csv file}
+# Installing the necessary packages
+rm(list = ls())
+
+df1 <- read.csv("202301-divvy-tripdata.csv")
+df2 <- read.csv("202302-divvy-tripdata.csv")
+df3 <- read.csv("202303-divvy-tripdata.csv")
+df4 <- read.csv("202304-divvy-tripdata.csv")
+df5 <- read.csv("202305-divvy-tripdata.csv")
+df6 <- read.csv("202306-divvy-tripdata.csv")
+df7 <- read.csv("202307-divvy-tripdata.csv")
+df8 <- read.csv("202308-divvy-tripdata.csv")
+df9 <- read.csv("202309-divvy-tripdata.csv")
+df10 <- read.csv("202310-divvy-tripdata.csv")
+df11 <- read.csv("202311-divvy-tripdata.csv")
+df12 <- read.csv("202312-divvy-tripdata.csv")
+```
+
+PROCESS: Throughout the data processing phase, meticulous cleaning and
+aggregation of Divvy bike trip data from 2023 were conducted to ensure
+accuracy and reliability. By preparing a unified data set and applying
+rigorous analysis techniques, we laid the foundation for deriving
+meaningful insights into rider behavior and usage patterns.
+
+Data Cleaning 
+Filtering: Removed entries with empty
+start_station_name and trips with non-positive duration.
+
+-   NA Removal: Dropped rows with missing values.
+
+-   Empty Columns and Rows: Removed empty columns and rows using
+
+-   Date/Time Conversion: Converted started_at and ended_at to datetime
+    format and extracted date (Ymd), start hour (start_hour), and end
+    hour (end_hour).
+
+-   Duration Calculation: Calculated trip durations in both hours and
+    minutes.
+
+```{r merging files and cleaning}
+## Combine 12 data.frames into One (1) data.frame and clean data
+df_list <- list(df1, df2, df3, df4, df5, df6, df7, df8, df9, df10, df11, df12)
+
+# Combine into one dataframe
+bike_rides <- bind_rows(df_list) %>%
+  remove_empty(which = "cols") %>%
+  remove_empty(which = "rows") %>%
+  filter(!is.na(start_station_name), !is.na(ended_at), !is.na(started_at))
+
+# Convert date-time and calculate duration
+bike_rides <- bike_rides %>%
+  mutate(
+    started_at = ymd_hms(started_at),
+    ended_at = ymd_hms(ended_at),
+    Ymd = as.Date(started_at),
+    start_hour = hour(started_at),
+    end_hour = hour(ended_at),
+    Minutes = round(difftime(ended_at, started_at, units = "mins"), 2)
+  ) %>%
+  filter(start_station_name != "", Minutes > 0) %>%
+  drop_na() %>%
+  janitor::remove_empty(which = c("cols", "rows"))
+
+# Sample 10% of the data for quicker analysis
+sampled_bike_rides <- bike_rides %>% sample_frac(0.1)
+```
+
+ANALYZE:
+
+Analyzing the data trends revealed crucial insights into rider behavior
+and preferences, guiding targeted strategies to convert casual riders
+into annual members effectively. By leveraging these insights, Cyclistic
+aims to optimize bike availability, enhance customer satisfaction, and
+drive sustainable growth in membership conversions
+
+```{r Column names}
+#Check the structure and unique values
+
+# Generate rider_id assuming ride_id is unique per rider
+sampled_bike_rides <- sampled_bike_rides %>%
+  group_by(ride_id) %>%
+  mutate(rider_id = cur_group_id()) %>%
+  ungroup()
+
+# Summarize first and last status for each rider
+conversion_data <- sampled_bike_rides %>%
+  arrange(rider_id, started_at) %>%
+  group_by(rider_id) %>%
+  summarize(
+    first_status = first(member_casual),
+    last_status = last(member_casual)
+  ) %>%
+  filter(first_status == "casual" & last_status == "member")
+
+# Print to check the data
+print(head(conversion_data))
+
+```
+
+```{r Checking how many riders go from casual to annual}
+# Plot the data if there are any conversions
+if (nrow(conversion_data) > 0) {
+  conversion_plot <- ggplot(conversion_data, aes(x = factor(1), fill = first_status)) +
+    geom_bar(stat = "count", width = 0.5) +
+    labs(x = "", y = "Number of Conversions",
+         title = "Casual Riders Converted to Annual Members",
+         fill = "First Status") +
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    scale_fill_manual(values = c("casual" = "lightblue", "member" = "lightgreen"))
+  
+  print(conversion_plot)
+} else {
+  print("No conversions from casual to member found.")
+}
+
+```
+
+SHARE:
+
+Sharing these data-driven insights with key stakeholders, including the
+Divvy Bike Operations Team, Marketing Department, Customer Experience
+Team, and Urban Planners, will facilitate informed decision-making and
+collaborative efforts. By aligning on actionable strategies, Cyclistic
+aims to enhance operational efficiency, improve marketing initiatives,
+and ultimately foster a more seamless and rewarding experience for
+riders across Chicago.
+
+```{r plot}
+# Plot 1: Count by Bike Type
+bike_type_counts <- bike_rides %>%
+  count(rideable_type)
+
+# Plot the data
+ggplot(bike_type_counts, aes(x = rideable_type, y = n)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(x = "Bike Type", y = "Count",
+       title = "Count of Rides by Bike Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r plot}
+# Plot 2: Count of Rides by Rider Type
+# Count the rides by rider type
+rider_type_counts <- bike_rides %>%
+  count(member_casual)
+
+# Plot the data
+ggplot(rider_type_counts, aes(x = member_casual, y = n, fill = member_casual)) +
+  geom_bar(stat = "identity", width = 0.5, color = "black") +
+  labs(x = "Rider Type", y = "Count",
+       title = "Count of Rides by Rider Type",
+       fill = "Rider Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0))
+```
+
+```{r plot}
+# Plot 3: Top 20 Start Stations by Ride Count
+# Count the rides by start station and get the top 20
+top_start_stations <- bike_rides %>%
+  count(start_station_name, sort = TRUE) %>%
+  slice_head(n = 20)
+
+# Plot the data
+ggplot(top_start_stations, aes(x = reorder(start_station_name, n), y = n)) +
+  geom_bar(stat = "identity", fill = "lightgreen", color = "black") +
+  labs(x = "Start Station", y = "Ride Count",
+       title = "Top 20 Start Stations by Ride Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r plot}
+# Plot 4: Calculate conversions over time
+conversion_over_time <- sampled_bike_rides %>%
+  arrange(started_at) %>%
+  mutate(conversion_status = ifelse(member_casual == "casual", "Casual", "Annual")) %>%
+  group_by(Ymd, conversion_status) %>%
+  summarize(conversions = n()) %>%
+  ungroup()
+
+# Plot the data
+ggplot(conversion_over_time, aes(x = Ymd, y = conversions, color = conversion_status)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Date", y = "Number of Conversions",
+       title = "Conversion Trend Over Time",
+       color = "Conversion Status") +
+  scale_color_manual(values = c("Casual" = "blue", "Annual" = "green")) +
+  theme_minimal()
+```
+
+ACT
+
+Based on the comprehensive information provided in the Cyclistic
+Bike-Share Program Analysis project, here are three recommendations to
+increase the number of annual members or convert casual riders into
+annual members more effectively:
+
+1.  Targeted Marketing Campaigns Based on Usage Patterns:
+
+-   Data Insight: Utilize the insights gained from the analysis of bike
+    usage patterns, such as peak usage times and popular bike types
+    among casual riders.
+
+-   Recommendation: Launch targeted marketing campaigns that highlight
+    the benefits of annual membership during peak usage times or for
+    specific bike types that casual riders prefer. For example,
+    promotions offering discounted annual memberships or exclusive
+    benefits during high-demand periods could incentivize casual riders
+    to switch to annual memberships.
+
+2.  Enhanced Customer Engagement through Personalization:
+
+-   Data Insight: Leverage customer behavior data to personalize
+    marketing efforts and engagement strategies.
+
+-   Recommendation: Implement personalized marketing messages based on
+    individual riding habits, preferences, and demographics. Use data
+    analytics to tailor communications that emphasize how annual
+    membership can enhance their specific riding experience or cater to
+    their needs better than casual membership. For instance, sending
+    personalized emails with membership benefits that align with their
+    usage patterns (e.g., frequent commuters, leisure riders) can
+    increase conversion rates.
+
+3.  Improvement of User Experience and Convenience:
+
+-   Data Insight: Focus on improving the overall user experience and
+    convenience factors that influence membership decisions.
+
+-   Recommendation: Streamline the membership registration process and
+    ensure it is user-friendly and accessible across different devices.
+    Provide clear and compelling information on the benefits of annual
+    membership, such as cost savings, bike availability guarantees, and
+    additional services (e.g., priority access during peak times,
+    special events). Enhance the Cyclistic mobile app or website to
+    prominently feature these benefits and simplify the upgrade process
+    from casual to annual membership.
+
+Implementation Strategy:
+
+-   Measurement and Evaluation: Set measurable goals for each
+    recommendation, such as an increase in annual membership sign-ups or
+    conversion rates from casual to annual members.
+
+-   Continuous Optimization: Monitor the effectiveness of implemented
+    strategies using data analytics. Adjust marketing tactics based on
+    real-time insights and feedback from members.
+
+-   Collaboration with Stakeholders: Engage with the Cyclistic Marketing
+    Analytics Team and Executive Team to align strategies with broader
+    business goals and ensure support for implementation.
+
+By implementing these recommendations, Cyclistic can strategically
+enhance its efforts to convert casual riders into loyal annual members,
+thereby optimizing bike availability, improving customer satisfaction,
+and fostering long-term growth for the bike-share program.
